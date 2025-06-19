@@ -16,15 +16,13 @@ using Microsoft.AspNetCore.Identity;
 using StudentPerformance.Api.Data.Entities;
 using StudentPerformance.Api.Utilities;
 using System;
-using StudentPerformance.Api; // Убедитесь, что это пространство имен существует, если нет, удалите.
+using StudentPerformance.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // --- 1. Configure Services ---
-// Add controllers (API controllers)
 builder.Services.AddControllers();
 
-// Register custom services for Dependency Injection
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IGradeService, GradeService>();
 builder.Services.AddScoped<IRoleService, RoleService>();
@@ -37,24 +35,30 @@ builder.Services.AddScoped<IStudentService, StudentService>();
 builder.Services.AddScoped<ITeacherService, TeacherService>();
 builder.Services.AddScoped<IReportService, ReportService>();
 
-
-// Register IPasswordHasher for hashing passwords
 builder.Services.AddScoped<IPasswordHasher<User>, SimplePasswordHasher>();
 
-// Configure AutoMapper (MappingProfile to map entities to DTOs)
 builder.Services.AddAutoMapper(typeof(MappingProfile).Assembly);
 
-// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Configure DbContext for PostgreSQL ---
-// Получаем строку подключения. Сначала пробуем DATABASE_URL (для Heroku/Railway),
-// затем ConnectionStrings:DefaultConnection (для локальной разработки).
-var connectionString = builder.Configuration.GetValue<string>("DATABASE_URL") ?? // Проверяем переменную среды DATABASE_URL от Railway
-                       builder.Configuration.GetConnectionString("DefaultConnection") ?? // Если нет, берем из ConnectionStrings в appsettings.json
-                       throw new InvalidOperationException("Connection string 'DATABASE_URL' or 'DefaultConnection' not found.");
+// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Получение строки подключения ---
+// Сначала пробуем получить DATABASE_URL, которую Railway автоматически предоставляет.
+// Если ее нет (например, при локальной разработке), то используем DefaultConnection из appsettings.json.
+var connectionString = builder.Configuration.GetValue<string>("DATABASE_URL");
+
+if (string.IsNullOrEmpty(connectionString))
+{
+    // Если DATABASE_URL не установлена (например, при локальной разработке), используем DefaultConnection
+    connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+}
+
+if (string.IsNullOrEmpty(connectionString))
+{
+    throw new InvalidOperationException("Connection string 'DATABASE_URL' or 'DefaultConnection' not found.");
+}
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(connectionString)); // Использование UseNpgsql
+    options.UseNpgsql(connectionString));
 
-// ... остальной код такой же ...
+// ... Остальной код Program.cs остается без изменений ...
 
 // --- 2. JWT Authentication Setup ---
 var jwtSecret = builder.Configuration["JwtSettings:Secret"];
@@ -161,8 +165,8 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
-        context.Database.Migrate(); // Applies any pending migrations for the database
-        DataSeeder.SeedData(context); // Make sure DataSeeder.SeedData handles existing data gracefully
+        context.Database.Migrate();
+        DataSeeder.SeedData(context);
     }
     catch (Exception ex)
     {
@@ -172,28 +176,16 @@ using (var scope = app.Services.CreateScope())
 }
 // --- End Data Seeding Section ---
 
-// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Включаем Swagger UI для всех сред ---
+// --- Включаем Swagger UI для всех сред ---
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// Закомментированный старый блок:
-// if (app.Environment.IsDevelopment())
-// {
-//     app.UseSwagger();
-//     app.UseSwaggerUI();
-// }
-// else
-// {
-//     app.UseHsts();
-//     app.UseHttpsRedirection();
-// }
-
-app.UseCors(AllowReactAppSpecificOrigins); // CORS must be before UseRouting, UseAuthentication, UseAuthorization
+app.UseCors(AllowReactAppSpecificOrigins);
 
 app.UseRouting();
-app.UseAuthentication(); // JWT authentication
-app.UseAuthorization(); // Role-based authorization
+app.UseAuthentication();
+app.UseAuthorization();
 
-app.MapControllers(); // Maps controller routes
+app.MapControllers();
 
 app.Run();
