@@ -74,7 +74,7 @@ namespace StudentPerformance.Api.Services
 
         public async Task<SemesterDto> AddSemesterAsync(AddSemesterRequest request)
         {
-            // ИЗМЕНЕНО: Проверка на дубликат названия ИЛИ КОДА
+            // Проверка на дубликат названия ИЛИ КОДА
             if (await _context.Semesters.AnyAsync(s => s.Name == request.Name))
             {
                 _logger.LogWarning($"Add semester failed: Semester with name '{request.Name}' already exists.");
@@ -86,23 +86,28 @@ namespace StudentPerformance.Api.Services
                 throw new ConflictException($"Семестр с кодом '{request.Code}' уже существует.");
             }
 
+            // Маппинг из AddSemesterRequest в Semester
+            // Это создаст объект Semester с датами, у которых Kind=Unspecified
             var semester = _mapper.Map<Semester>(request);
 
-            // ИСПРАВЛЕНО: Принудительное преобразование StartDate и EndDate к Utc
-            // Удалены проверки .HasValue и .Value, так как request.StartDate и request.EndDate
-            // являются необнуляемыми DateTime в AddSemesterRequest.
+            // ИСПРАВЛЕНО: Принудительное преобразование StartDate и EndDate к Utc.
+            // Используем DateTime.SpecifyKind, так как request.StartDate и request.EndDate
+            // являются необнуляемыми DateTime (т.е. они всегда имеют значение).
             semester.StartDate = DateTime.SpecifyKind(request.StartDate, DateTimeKind.Utc);
             semester.EndDate = DateTime.SpecifyKind(request.EndDate, DateTimeKind.Utc);
 
-            // Установка CreatedAt и UpdatedAt в UTC
+            // Также явно устанавливаем CreatedAt и UpdatedAt в UTC
             semester.CreatedAt = DateTime.UtcNow;
             semester.UpdatedAt = DateTime.UtcNow;
 
 
             _context.Semesters.Add(semester);
             await _context.SaveChangesAsync();
+
+            // Возвращаем DTO после сохранения и получения сгенерированного ID
             return _mapper.Map<SemesterDto>(semester);
         }
+
 
         public async Task<bool> UpdateSemesterAsync(int semesterId, UpdateSemesterRequest request)
         {
