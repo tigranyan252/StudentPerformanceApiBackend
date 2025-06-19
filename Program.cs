@@ -16,7 +16,8 @@ using Microsoft.AspNetCore.Identity;
 using StudentPerformance.Api.Data.Entities;
 using StudentPerformance.Api.Utilities;
 using System;
-using StudentPerformance.Api;
+using Npgsql;
+using StudentPerformance.Api; // Добавьте это using-директиву
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,14 +40,28 @@ builder.Services.AddScoped<IPasswordHasher<User>, SimplePasswordHasher>();
 
 builder.Services.AddAutoMapper(typeof(MappingProfile).Assembly);
 
-// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Получение строки подключения ---
-// Сначала пробуем получить DATABASE_URL, которую Railway автоматически предоставляет.
-// Если ее нет (например, при локальной разработке), то используем DefaultConnection из appsettings.json.
-var connectionString = builder.Configuration.GetValue<string>("DATABASE_URL");
+// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Получение и парсинг строки подключения ---
+string connectionString;
+var databaseUrl = builder.Configuration.GetValue<string>("DATABASE_URL");
 
-if (string.IsNullOrEmpty(connectionString))
+if (!string.IsNullOrEmpty(databaseUrl))
 {
-    // Если DATABASE_URL не установлена (например, при локальной разработке), используем DefaultConnection
+    // Парсим DATABASE_URL, предоставленную Railway
+    // Формат: postgresql://user:password@host:port/database
+    var uri = new Uri(databaseUrl);
+    var userInfo = uri.UserInfo.Split(':');
+    var username = userInfo[0];
+    var password = userInfo[1];
+    var host = uri.Host;
+    var port = uri.Port;
+    var database = uri.Segments[1]; // Получаем имя базы данных (например, "railway/")
+
+    // Строим строку подключения в явном формате Npgsql
+    connectionString = $"Host={host};Port={port};Username={username};Password={password};Database={database.TrimEnd('/')};SSL Mode=Require;Trust Server Certificate=true";
+}
+else
+{
+    // Если DATABASE_URL не установлена (локальная разработка), используем DefaultConnection из appsettings.json
     connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 }
 
