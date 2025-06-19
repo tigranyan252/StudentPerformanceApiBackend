@@ -17,7 +17,7 @@ using StudentPerformance.Api.Data.Entities;
 using StudentPerformance.Api.Utilities;
 using System;
 using Npgsql;
-using StudentPerformance.Api;
+using StudentPerformance.Api; // Если это ваш корневой namespace, оставьте его
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,15 +40,14 @@ builder.Services.AddScoped<IPasswordHasher<User>, SimplePasswordHasher>();
 
 builder.Services.AddAutoMapper(typeof(MappingProfile).Assembly);
 
-// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Упрощенное и принудительное получение строки подключения ---
+// --- Получение строки подключения ---
 string connectionString;
 
-// Принудительно используем отдельные переменные среды Render
 var pgHost = Environment.GetEnvironmentVariable("PGHOST");
 var pgDatabase = Environment.GetEnvironmentVariable("PGDATABASE");
 var pgUser = Environment.GetEnvironmentVariable("PGUSER");
 var pgPassword = Environment.GetEnvironmentVariable("PGPASSWORD");
-var pgPort = Environment.GetEnvironmentVariable("PGPORT"); // Это будет string
+var pgPort = Environment.GetEnvironmentVariable("PGPORT");
 
 if (string.IsNullOrEmpty(pgHost) ||
     string.IsNullOrEmpty(pgDatabase) ||
@@ -56,9 +55,6 @@ if (string.IsNullOrEmpty(pgHost) ||
     string.IsNullOrEmpty(pgPassword) ||
     string.IsNullOrEmpty(pgPort))
 {
-    // Если какая-либо из PG* переменных отсутствует, значит, это, вероятно, локальная среда
-    // или некорректная настройка на хостинге.
-    // Возвращаемся к DefaultConnection для локальной разработки.
     connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
     if (string.IsNullOrEmpty(connectionString))
     {
@@ -67,7 +63,6 @@ if (string.IsNullOrEmpty(pgHost) ||
 }
 else
 {
-    // Все PG* переменные присутствуют, строим строку подключения из них
     connectionString = $"Host={pgHost};Port={pgPort};Username={pgUser};Password={pgPassword};Database={pgDatabase};SSL Mode=Require;Trust Server Certificate=true";
 }
 
@@ -75,7 +70,6 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 // --- 2. JWT Authentication Setup ---
-// Эти части кода остались без изменений
 var jwtSecret = Environment.GetEnvironmentVariable("JwtSettings__Secret");
 var jwtIssuer = Environment.GetEnvironmentVariable("JwtSettings__Issuer");
 var jwtAudience = Environment.GetEnvironmentVariable("JwtSettings__Audience");
@@ -149,41 +143,41 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: AllowReactAppSpecificOrigins, policy =>
     {
-        // Теперь CorsSettings:AllowedOrigins также читается как переменная среды
-        var allowedOrigins = Environment.GetEnvironmentVariable("CorsSettings__AllowedOrigins")?
-                                 .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                                 .Select(o => o.Trim())
-                                 .ToArray();
+        var allowedOriginsFromEnv = Environment.GetEnvironmentVariable("CorsSettings__AllowedOrigins");
+        string[] originsToUse;
 
-        if (allowedOrigins != null && allowedOrigins.Length > 0)
+        if (!string.IsNullOrEmpty(allowedOriginsFromEnv) && allowedOriginsFromEnv != "*")
         {
-            policy.WithOrigins(allowedOrigins)
-                  .AllowAnyMethod()
-                  .AllowAnyHeader()
-                  .AllowCredentials();
+            // Используем список из переменной среды
+            originsToUse = allowedOriginsFromEnv.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                                                .Select(o => o.Trim())
+                                                .ToArray();
         }
         else
         {
-            // Fallback for local development if env var is not set
-            var localAllowedOrigins = builder.Configuration["CorsSettings:AllowedOrigins"]?
-                                         .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
-                                         .Select(o => o.Trim())
-                                         .ToArray();
-            if (localAllowedOrigins != null && localAllowedOrigins.Length > 0)
+            // Fallback для локальной разработки или если переменная среды не задана/некорректна
+            // Используем значения из appsettings.json
+            var localAllowedOrigins = builder.Configuration["CorsSettings:AllowedOrigins"];
+            if (!string.IsNullOrEmpty(localAllowedOrigins))
             {
-                policy.WithOrigins(localAllowedOrigins)
-                      .AllowAnyMethod()
-                      .AllowAnyHeader()
-                      .AllowCredentials();
+                originsToUse = localAllowedOrigins.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                                  .Select(o => o.Trim())
+                                                  .ToArray();
             }
             else
             {
-                // Если вообще ничего не настроено, разрешаем все (не рекомендуется для продакшена)
-                policy.AllowAnyOrigin()
-                      .AllowAnyMethod()
-                      .AllowAnyHeader();
+                // Крайний случай: если нет ни переменной среды, ни настройки в appsettings.json,
+                // используем только localhost для разработки.
+                originsToUse = new[] { "http://localhost:3000", "https://localhost:7242" };
             }
         }
+
+        // ВСЕГДА используем AllowCredentials, поэтому * невозможен.
+        // Мы уже убедились, что originsToUse не содержит *
+        policy.WithOrigins(originsToUse)
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials();
     });
 });
 
