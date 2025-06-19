@@ -12,9 +12,9 @@ namespace StudentPerformance.Api.Data
     {
         public static void SeedData(ApplicationDbContext context)
         {
-            // context.Database.EnsureCreated(); // Consider using context.Database.Migrate() if using migrations
-            // Вы уже используете context.Database.Migrate() в Program.cs, поэтому EnsureCreated() здесь не нужен.
+            // context.Database.EnsureCreated(); // No need, using Migrate() in Program.cs
 
+            // Define variables (no change)
             Role adminRole, teacherRole, studentRole;
             List<User> allUsers;
             List<User> teacherUsers;
@@ -38,9 +38,9 @@ namespace StudentPerformance.Api.Data
                     new Role { Name = "Student", Description = "Enrolled Student", CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
                 };
                 context.Roles.AddRange(roles);
-                context.SaveChanges();
+                context.SaveChanges(); // Сохраняем сразу, чтобы получить ID и сделать их доступными
             }
-            // Retrieve roles by name since IDs are now database-generated
+            // Всегда получаем актуальные роли из БД после возможного засеивания
             adminRole = context.Roles.FirstOrDefault(r => r.Name == "Admin");
             teacherRole = context.Roles.FirstOrDefault(r => r.Name == "Teacher");
             studentRole = context.Roles.FirstOrDefault(r => r.Name == "Student");
@@ -54,7 +54,6 @@ namespace StudentPerformance.Api.Data
                     .RuleFor(u => u.FirstName, f => f.Name.FirstName())
                     .RuleFor(u => u.LastName, f => f.Name.LastName())
                     .RuleFor(u => u.Email, (f, u) => f.Internet.Email(u.FirstName, u.LastName))
-                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                     .RuleFor(u => u.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
                     .RuleFor(u => u.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
 
@@ -65,8 +64,9 @@ namespace StudentPerformance.Api.Data
                 context.Users.AddRange(adminUsersList);
                 context.Users.AddRange(teacherUsersList);
                 context.Users.AddRange(studentUsersList);
-                context.SaveChanges();
+                context.SaveChanges(); // Сохраняем сразу, чтобы получить ID
             }
+            // Всегда получаем актуальных пользователей из БД после возможного засеивания
             allUsers = context.Users.ToList();
             teacherUsers = allUsers.Where(u => u.RoleId == teacherRole.RoleId).ToList();
             studentUsers = allUsers.Where(u => u.RoleId == studentRole.RoleId).ToList();
@@ -79,13 +79,12 @@ namespace StudentPerformance.Api.Data
                     .RuleFor(g => g.Name, f => $"Группа {f.Random.AlphaNumeric(3).ToUpper()}")
                     .RuleFor(g => g.Code, f => f.Finance.Account(4))
                     .RuleFor(g => g.Description, f => f.Lorem.Sentence())
-                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                     .RuleFor(g => g.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
                     .RuleFor(g => g.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
                 context.Groups.AddRange(groupFaker.Generate(5));
-                context.SaveChanges();
+                context.SaveChanges(); // Сохраняем сразу
             }
-            groups = context.Groups.ToList();
+            groups = context.Groups.ToList(); // Всегда получаем актуальные группы
 
             // 4. Seed Subjects
             if (!context.Subjects.Any())
@@ -94,34 +93,35 @@ namespace StudentPerformance.Api.Data
                     .RuleFor(s => s.Name, f => f.Commerce.ProductName())
                     .RuleFor(s => s.Code, f => f.Random.AlphaNumeric(5).ToUpper())
                     .RuleFor(s => s.Description, f => f.Lorem.Sentence())
-                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                     .RuleFor(s => s.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
                     .RuleFor(s => s.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
                 context.Subjects.AddRange(subjectFaker.Generate(10));
-                context.SaveChanges();
+                context.SaveChanges(); // Сохраняем сразу
             }
-            subjects = context.Subjects.ToList();
+            subjects = context.Subjects.ToList(); // Всегда получаем актуальные предметы
 
             // 5. Seed Semesters
             if (!context.Semesters.Any())
             {
-                var currentYear = DateTime.UtcNow.Year; // ИСПРАВЛЕНИЕ: Использовать UtcNow для получения года
+                var currentYear = DateTime.UtcNow.Year;
                 var semestersToSeed = new List<Semester>
                 {
-                    // ИСПРАВЛЕНИЕ: Явно указываем DateTimeKind.Utc при создании новых DateTime
                     new Semester { Name = $"{currentYear} Весенний", StartDate = new DateTime(currentYear, 2, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(currentYear, 6, 30, 0, 0, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
                     new Semester { Name = $"{currentYear} Осенний", StartDate = new DateTime(currentYear, 9, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(currentYear, 12, 31, 0, 0, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
                     new Semester { Name = $"{currentYear - 1} Весенний", StartDate = new DateTime(currentYear - 1, 2, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(currentYear - 1, 6, 30, 0, 0, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
                     new Semester { Name = $"{currentYear - 1} Осенний", StartDate = new DateTime(currentYear - 1, 9, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(currentYear - 1, 12, 31, 0, 0, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
                 };
                 context.Semesters.AddRange(semestersToSeed);
-                context.SaveChanges();
+                context.SaveChanges(); // Сохраняем сразу
             }
-            semesters = context.Semesters.ToList();
+            semesters = context.Semesters.ToList(); // Всегда получаем актуальные семестры
 
 
             // 6. Seed Students (связываем с существующими Users и Groups)
-            if (!context.Students.Any())
+            // Важно: Этот блок должен выполняться только если studentUsers (пользователи с ролью Student) не пуст И groups не пуст.
+            // Если studentUsers пуст, то generatedStudents будет пустым, и AddRange ничего не добавит.
+            // Если groups пуст, то studentDataFaker.PickRandom(groups) вызовет ошибку "The list is empty".
+            if (!context.Students.Any() && studentUsers.Any() && groups.Any())
             {
                 var generatedStudents = new List<Student>();
                 var studentDataFaker = new Faker();
@@ -131,7 +131,6 @@ namespace StudentPerformance.Api.Data
                     {
                         UserId = user.Id,
                         GroupId = studentDataFaker.PickRandom(groups).GroupId,
-                        // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                         DateOfBirth = studentDataFaker.Date.Past(20, DateTime.UtcNow.AddYears(-18)).ToUniversalTime(),
                         EnrollmentDate = studentDataFaker.Date.Past(2, DateTime.UtcNow.AddYears(-1)).ToUniversalTime(),
                         IsActive = true,
@@ -142,11 +141,12 @@ namespace StudentPerformance.Api.Data
                 context.Students.AddRange(generatedStudents);
                 context.SaveChanges();
             }
-            students = context.Students.ToList();
+            students = context.Students.ToList(); // Всегда получаем актуальных студентов
 
 
             // 7. Seed Teachers (связываем с существующими Users)
-            if (!context.Teachers.Any())
+            // Важно: Этот блок должен выполняться только если teacherUsers (пользователи с ролью Teacher) не пуст.
+            if (!context.Teachers.Any() && teacherUsers.Any())
             {
                 var generatedTeachers = new List<Teacher>();
                 var teacherDataFaker = new Faker();
@@ -164,11 +164,12 @@ namespace StudentPerformance.Api.Data
                 context.Teachers.AddRange(generatedTeachers);
                 context.SaveChanges();
             }
-            teachers = context.Teachers.ToList();
+            teachers = context.Teachers.ToList(); // Всегда получаем актуальных учителей
 
 
             // 8. Seed TeacherSubjectGroupAssignments
-            if (!context.TeacherSubjectGroupAssignments.Any())
+            // Важно: Этот блок должен выполняться только если teachers, subjects, groups, semesters не пусты.
+            if (!context.TeacherSubjectGroupAssignments.Any() && teachers.Any() && subjects.Any() && groups.Any() && semesters.Any())
             {
                 var uniqueAssignments = new HashSet<(int TeacherId, int SubjectId, int GroupId, int SemesterId)>();
                 var generatedAssignments = new List<TeacherSubjectGroupAssignment>();
@@ -194,7 +195,6 @@ namespace StudentPerformance.Api.Data
                             SubjectId = subject.SubjectId,
                             GroupId = group.GroupId,
                             SemesterId = semester.SemesterId,
-                            // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                             CreatedAt = faker.Date.Past(1).ToUniversalTime(),
                             UpdatedAt = faker.Date.Recent(1).ToUniversalTime()
                         });
@@ -207,7 +207,8 @@ namespace StudentPerformance.Api.Data
 
 
             // 9. Seed Assignments
-            if (!context.Assignments.Any())
+            // Важно: Этот блок должен выполняться только если teacherSubjectGroupAssignments не пуст.
+            if (!context.Assignments.Any() && teacherSubjectGroupAssignments.Any())
             {
                 var assignmentFaker = new Faker<Assignment>()
                     .RuleFor(a => a.TeacherSubjectGroupAssignmentId, f => f.PickRandom(teacherSubjectGroupAssignments).TeacherSubjectGroupAssignmentId)
@@ -215,10 +216,8 @@ namespace StudentPerformance.Api.Data
                     .RuleFor(a => a.Description, f => f.Lorem.Sentence())
                     .RuleFor(a => a.Type, f => f.PickRandom("Quiz", "Homework", "Project", "Exam"))
                     .RuleFor(a => a.MaxScore, f => f.Random.Decimal(5, 100))
-                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                     .RuleFor(a => a.DueDate, f => f.Date.Future(1).ToUniversalTime())
                     .RuleFor(a => a.SubmissionDate, (f, a) => f.Date.Between(a.CreatedAt, a.DueDate).ToUniversalTime())
-                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                     .RuleFor(a => a.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
                     .RuleFor(a => a.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
                 context.Assignments.AddRange(assignmentFaker.Generate(50));
@@ -227,16 +226,15 @@ namespace StudentPerformance.Api.Data
             assignments = context.Assignments.ToList();
 
             // 10. Seed Attendances
-            if (!context.Attendances.Any())
+            // Важно: Этот блок должен выполняться только если students и teacherSubjectGroupAssignments не пусты.
+            if (!context.Attendances.Any() && students.Any() && teacherSubjectGroupAssignments.Any())
             {
                 var attendanceFaker = new Faker<Attendance>()
                     .RuleFor(a => a.StudentId, f => f.PickRandom(students).StudentId)
                     .RuleFor(a => a.TeacherSubjectGroupAssignmentId, f => f.PickRandom(teacherSubjectGroupAssignments).TeacherSubjectGroupAssignmentId)
-                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                     .RuleFor(a => a.Date, f => f.Date.Recent(30).ToUniversalTime())
                     .RuleFor(a => a.Status, f => f.PickRandom("Present", "Absent", "Late", "Excused"))
                     .RuleFor(a => a.Remarks, f => f.Lorem.Sentence(3))
-                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
                     .RuleFor(a => a.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
                     .RuleFor(a => a.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
                 context.Attendances.AddRange(attendanceFaker.Generate(100));
@@ -244,7 +242,8 @@ namespace StudentPerformance.Api.Data
             }
 
             // 11. Seed Grades
-            if (!context.Grades.Any())
+            // Важно: Этот блок должен выполняться только если students, subjects, semesters, teachers, teacherSubjectGroupAssignments не пусты.
+            if (!context.Grades.Any() && students.Any() && subjects.Any() && semesters.Any() && teachers.Any() && teacherSubjectGroupAssignments.Any())
             {
                 var baseFaker = new Faker();
 
@@ -262,24 +261,27 @@ namespace StudentPerformance.Api.Data
                             var semesterForGrade = semesters.FirstOrDefault(sem => sem.SemesterId == tsga.SemesterId);
                             var teacherForGrade = teachers.FirstOrDefault(t => t.TeacherId == tsga.TeacherId);
 
-                            for (int i = 0; i < baseFaker.Random.Int(1, 3); i++)
+                            // Дополнительная проверка, чтобы избежать NullReferenceException, если ForEach PickRandom выдал null (хотя PickRandom не должен)
+                            if (subjectForGrade != null && semesterForGrade != null && teacherForGrade != null)
                             {
-                                context.Grades.Add(new Grade
+                                for (int i = 0; i < baseFaker.Random.Int(1, 3); i++)
                                 {
-                                    StudentId = student.StudentId,
-                                    SubjectId = subjectForGrade?.SubjectId,
-                                    SemesterId = semesterForGrade?.SemesterId,
-                                    TeacherId = teacherForGrade?.TeacherId,
-                                    TeacherSubjectGroupAssignmentId = tsga.TeacherSubjectGroupAssignmentId,
-                                    Value = baseFaker.Random.Decimal(0, 100),
-                                    ControlType = baseFaker.PickRandom("Quiz", "Exam", "Lab", "Project"),
-                                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
-                                    DateReceived = baseFaker.Date.Recent(60).ToUniversalTime(),
-                                    Status = baseFaker.PickRandom("Passed", "Failed", "Pending"),
-                                    Notes = baseFaker.Lorem.Sentence(),
-                                    CreatedAt = DateTime.UtcNow,
-                                    UpdatedAt = DateTime.UtcNow
-                                });
+                                    context.Grades.Add(new Grade
+                                    {
+                                        StudentId = student.StudentId,
+                                        SubjectId = subjectForGrade.SubjectId, // Убрал ?
+                                        SemesterId = semesterForGrade.SemesterId, // Убрал ?
+                                        TeacherId = teacherForGrade.TeacherId, // Убрал ?
+                                        TeacherSubjectGroupAssignmentId = tsga.TeacherSubjectGroupAssignmentId,
+                                        Value = baseFaker.Random.Decimal(0, 100),
+                                        ControlType = baseFaker.PickRandom("Quiz", "Exam", "Lab", "Project"),
+                                        DateReceived = baseFaker.Date.Recent(60).ToUniversalTime(),
+                                        Status = baseFaker.PickRandom("Passed", "Failed", "Pending"),
+                                        Notes = baseFaker.Lorem.Sentence(),
+                                        CreatedAt = DateTime.UtcNow,
+                                        UpdatedAt = DateTime.UtcNow
+                                    });
+                                }
                             }
                         }
                     }
