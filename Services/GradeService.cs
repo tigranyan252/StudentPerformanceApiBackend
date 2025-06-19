@@ -155,9 +155,9 @@ namespace StudentPerformance.Api.Services
 
             // 4. Validate Student exists and belongs to the correct group for this TSGA
             var student = await _context.Students
-                                         .Include(s => s.Group)
-                                         .Include(s => s.User)
-                                         .FirstOrDefaultAsync(s => s.StudentId == request.StudentId);
+                                       .Include(s => s.Group)
+                                       .Include(s => s.User)
+                                       .FirstOrDefaultAsync(s => s.StudentId == request.StudentId);
             if (student == null)
             {
                 throw new ArgumentException($"Student with ID {request.StudentId} not found.");
@@ -180,22 +180,31 @@ namespace StudentPerformance.Api.Services
             // 5. Map the DTO to a Grade entity
             var newGrade = _mapper.Map<Grade>(request);
 
+            // ИСПРАВЛЕНО: Принудительное преобразование DateReceived к Utc
+            // Важно: Эта строка должна быть ПОСЛЕ _mapper.Map(request),
+            // чтобы перезаписать значение, которое могло быть Unspecified.
+            if (newGrade.DateReceived.Kind == DateTimeKind.Unspecified)
+            {
+                newGrade.DateReceived = DateTime.SpecifyKind(newGrade.DateReceived, DateTimeKind.Utc);
+            }
+            // Также убедимся, что всегда UTC
+            newGrade.DateReceived = newGrade.DateReceived.ToUniversalTime();
+
+
             // Set properties derived from TSGA and audit fields
             newGrade.TeacherId = tsga.TeacherId;
             newGrade.SubjectId = tsga.SubjectId;
             newGrade.SemesterId = tsga.SemesterId;
             newGrade.CreatedAt = DateTime.UtcNow;
             newGrade.UpdatedAt = DateTime.UtcNow;
-            // ИСПРАВЛЕНО: Теперь AssignmentId берется из запроса
-            // newGrade.AssignmentId = null; // Эту строку удаляем/комментируем
             newGrade.AssignmentId = request.AssignmentId;
 
             _context.Grades.Add(newGrade);
             await _context.SaveChangesAsync();
 
             // 7. Retrieve the newly added grade with all its related entities for proper DTO mapping
-            var addedGrade = await GetGradeByIdAsync(newGrade.GradeId); // Используем наш же GetGradeByIdAsync для полной загрузки
-            return addedGrade!; // Non-nullable assertion after successful retrieval
+            var addedGrade = await GetGradeByIdAsync(newGrade.GradeId);
+            return addedGrade!;
         }
 
         /// <summary>
