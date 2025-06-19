@@ -17,7 +17,7 @@ using StudentPerformance.Api.Data.Entities;
 using StudentPerformance.Api.Utilities;
 using System;
 using Npgsql;
-using StudentPerformance.Api;
+using StudentPerformance.Api; // Убедитесь, что эта директива есть
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,45 +40,62 @@ builder.Services.AddScoped<IPasswordHasher<User>, SimplePasswordHasher>();
 
 builder.Services.AddAutoMapper(typeof(MappingProfile).Assembly);
 
-// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Получение и парсинг строки подключения ---
+// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Получение и парсинг строки подключения из отдельных переменных Render ---
 string connectionString;
-var databaseUrl = builder.Configuration.GetValue<string>("DATABASE_URL");
 
-if (!string.IsNullOrEmpty(databaseUrl))
+// Пытаемся получить отдельные компоненты строки подключения из переменных среды Render
+var pgHost = Environment.GetEnvironmentVariable("PGHOST");
+var pgDatabase = Environment.GetEnvironmentVariable("PGDATABASE");
+var pgUser = Environment.GetEnvironmentVariable("PGUSER");
+var pgPassword = Environment.GetEnvironmentVariable("PGPASSWORD");
+var pgPort = Environment.GetEnvironmentVariable("PGPORT"); // Это будет string
+
+// Если все эти переменные установлены, строим строку подключения
+if (!string.IsNullOrEmpty(pgHost) &&
+    !string.IsNullOrEmpty(pgDatabase) &&
+    !string.IsNullOrEmpty(pgUser) &&
+    !string.IsNullOrEmpty(pgPassword) &&
+    !string.IsNullOrEmpty(pgPort))
 {
-    // Парсим DATABASE_URL, предоставленную Render
-    // Формат: postgresql://user:password@host:port/database
-    var uri = new Uri(databaseUrl);
-    var userInfo = uri.UserInfo.Split(':');
-    var username = userInfo[0];
-    var password = userInfo[1];
-    var host = uri.Host;
-    var port = uri.Port;
-    var database = uri.Segments[1]; // Получаем имя базы данных (например, "diploma_project_db/")
-
-    // Строим строку подключения в явном формате Npgsql
-    connectionString = $"Host={host};Port={port};Username={username};Password={password};Database={database.TrimEnd('/')};SSL Mode=Require;Trust Server Certificate=true";
+    connectionString = $"Host={pgHost};Port={pgPort};Username={pgUser};Password={pgPassword};Database={pgDatabase};SSL Mode=Require;Trust Server Certificate=true";
 }
 else
 {
-    // Если DATABASE_URL не установлена (локальная разработка), используем DefaultConnection из appsettings.json
-    connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    // Если отдельные переменные Render не установлены, пытаемся использовать DATABASE_URL
+    // (это для совместимости или локальной разработки, если вы не используете PG* переменные локально)
+    var databaseUrl = builder.Configuration.GetValue<string>("DATABASE_URL");
+    if (!string.IsNullOrEmpty(databaseUrl))
+    {
+        var uri = new Uri(databaseUrl);
+        var userInfo = uri.UserInfo.Split(':');
+        var username = userInfo[0];
+        var password = userInfo[1];
+        var host = uri.Host;
+        var port = uri.Port;
+        var database = uri.Segments[1];
+
+        connectionString = $"Host={host};Port={port};Username={username};Password={password};Database={database.TrimEnd('/')};SSL Mode=Require;Trust Server Certificate=true";
+    }
+    else
+    {
+        // В крайнем случае, для локальной разработки, используем DefaultConnection
+        connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    }
 }
 
 if (string.IsNullOrEmpty(connectionString))
 {
-    throw new InvalidOperationException("Connection string 'DATABASE_URL' or 'DefaultConnection' not found.");
+    throw new InvalidOperationException("Connection string cannot be constructed. Neither individual PG* environment variables nor DATABASE_URL nor DefaultConnection are properly set.");
 }
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 // --- 2. JWT Authentication Setup ---
-// ИСПРАВЛЕНИЕ: Читаем JWT-настройки напрямую из переменных среды
+// Эти части кода остались без изменений, они уже используют Environment.GetEnvironmentVariable()
 var jwtSecret = Environment.GetEnvironmentVariable("JwtSettings__Secret");
 var jwtIssuer = Environment.GetEnvironmentVariable("JwtSettings__Issuer");
 var jwtAudience = Environment.GetEnvironmentVariable("JwtSettings__Audience");
-// Для ExpirationMinutes можно оставить GetValue, так как есть значение по умолчанию
 var accessTokenExpirationMinutes = builder.Configuration.GetValue<int>("JwtSettings:ExpirationMinutes", 60);
 
 if (string.IsNullOrEmpty(jwtSecret))
