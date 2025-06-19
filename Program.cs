@@ -17,7 +17,7 @@ using StudentPerformance.Api.Data.Entities;
 using StudentPerformance.Api.Utilities;
 using System;
 using Npgsql;
-using StudentPerformance.Api; // Убедитесь, что эта директива есть
+using StudentPerformance.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -40,59 +40,42 @@ builder.Services.AddScoped<IPasswordHasher<User>, SimplePasswordHasher>();
 
 builder.Services.AddAutoMapper(typeof(MappingProfile).Assembly);
 
-// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Получение и парсинг строки подключения из отдельных переменных Render ---
+// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Упрощенное и принудительное получение строки подключения ---
 string connectionString;
 
-// Пытаемся получить отдельные компоненты строки подключения из переменных среды Render
+// Принудительно используем отдельные переменные среды Render
 var pgHost = Environment.GetEnvironmentVariable("PGHOST");
 var pgDatabase = Environment.GetEnvironmentVariable("PGDATABASE");
 var pgUser = Environment.GetEnvironmentVariable("PGUSER");
 var pgPassword = Environment.GetEnvironmentVariable("PGPASSWORD");
 var pgPort = Environment.GetEnvironmentVariable("PGPORT"); // Это будет string
 
-// Если все эти переменные установлены, строим строку подключения
-if (!string.IsNullOrEmpty(pgHost) &&
-    !string.IsNullOrEmpty(pgDatabase) &&
-    !string.IsNullOrEmpty(pgUser) &&
-    !string.IsNullOrEmpty(pgPassword) &&
-    !string.IsNullOrEmpty(pgPort))
+if (string.IsNullOrEmpty(pgHost) ||
+    string.IsNullOrEmpty(pgDatabase) ||
+    string.IsNullOrEmpty(pgUser) ||
+    string.IsNullOrEmpty(pgPassword) ||
+    string.IsNullOrEmpty(pgPort))
 {
-    connectionString = $"Host={pgHost};Port={pgPort};Username={pgUser};Password={pgPassword};Database={pgDatabase};SSL Mode=Require;Trust Server Certificate=true";
+    // Если какая-либо из PG* переменных отсутствует, значит, это, вероятно, локальная среда
+    // или некорректная настройка на хостинге.
+    // Возвращаемся к DefaultConnection для локальной разработки.
+    connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrEmpty(connectionString))
+    {
+        throw new InvalidOperationException("Fatal Error: Database connection details are incomplete. Please ensure PGHOST, PGDATABASE, PGUSER, PGPASSWORD, PGPORT environment variables are set on Render, or 'DefaultConnection' is configured locally.");
+    }
 }
 else
 {
-    // Если отдельные переменные Render не установлены, пытаемся использовать DATABASE_URL
-    // (это для совместимости или локальной разработки, если вы не используете PG* переменные локально)
-    var databaseUrl = builder.Configuration.GetValue<string>("DATABASE_URL");
-    if (!string.IsNullOrEmpty(databaseUrl))
-    {
-        var uri = new Uri(databaseUrl);
-        var userInfo = uri.UserInfo.Split(':');
-        var username = userInfo[0];
-        var password = userInfo[1];
-        var host = uri.Host;
-        var port = uri.Port;
-        var database = uri.Segments[1];
-
-        connectionString = $"Host={host};Port={port};Username={username};Password={password};Database={database.TrimEnd('/')};SSL Mode=Require;Trust Server Certificate=true";
-    }
-    else
-    {
-        // В крайнем случае, для локальной разработки, используем DefaultConnection
-        connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    }
-}
-
-if (string.IsNullOrEmpty(connectionString))
-{
-    throw new InvalidOperationException("Connection string cannot be constructed. Neither individual PG* environment variables nor DATABASE_URL nor DefaultConnection are properly set.");
+    // Все PG* переменные присутствуют, строим строку подключения из них
+    connectionString = $"Host={pgHost};Port={pgPort};Username={pgUser};Password={pgPassword};Database={pgDatabase};SSL Mode=Require;Trust Server Certificate=true";
 }
 
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
 // --- 2. JWT Authentication Setup ---
-// Эти части кода остались без изменений, они уже используют Environment.GetEnvironmentVariable()
+// Эти части кода остались без изменений
 var jwtSecret = Environment.GetEnvironmentVariable("JwtSettings__Secret");
 var jwtIssuer = Environment.GetEnvironmentVariable("JwtSettings__Issuer");
 var jwtAudience = Environment.GetEnvironmentVariable("JwtSettings__Audience");
@@ -166,7 +149,8 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: AllowReactAppSpecificOrigins, policy =>
     {
-        var allowedOrigins = builder.Configuration["CorsSettings:AllowedOrigins"]?
+        // Теперь CorsSettings:AllowedOrigins также читается как переменная среды
+        var allowedOrigins = Environment.GetEnvironmentVariable("CorsSettings__AllowedOrigins")?
                                  .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                                  .Select(o => o.Trim())
                                  .ToArray();
@@ -180,9 +164,25 @@ builder.Services.AddCors(options =>
         }
         else
         {
-            policy.AllowAnyOrigin()
-                  .AllowAnyMethod()
-                  .AllowAnyHeader();
+            // Fallback for local development if env var is not set
+            var localAllowedOrigins = builder.Configuration["CorsSettings:AllowedOrigins"]?
+                                         .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                                         .Select(o => o.Trim())
+                                         .ToArray();
+            if (localAllowedOrigins != null && localAllowedOrigins.Length > 0)
+            {
+                policy.WithOrigins(localAllowedOrigins)
+                      .AllowAnyMethod()
+                      .AllowAnyHeader()
+                      .AllowCredentials();
+            }
+            else
+            {
+                // Если вообще ничего не настроено, разрешаем все (не рекомендуется для продакшена)
+                policy.AllowAnyOrigin()
+                      .AllowAnyMethod()
+                      .AllowAnyHeader();
+            }
         }
     });
 });
