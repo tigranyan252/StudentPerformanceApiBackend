@@ -163,7 +163,9 @@ namespace StudentPerformance.Api.Services
                 LastName = request.LastName,
                 Email = request.Email,
                 RoleId = studentRole.RoleId,
-                Role = studentRole
+                Role = studentRole,
+                CreatedAt = DateTime.UtcNow, // Убедитесь, что это тоже UTC
+                UpdatedAt = DateTime.UtcNow  // Убедитесь, что это тоже UTC
             };
 
             _context.Users.Add(newUser);
@@ -173,9 +175,13 @@ namespace StudentPerformance.Api.Services
             {
                 UserId = newUser.Id,
                 GroupId = request.GroupId.Value,
-                DateOfBirth = request.DateOfBirth,
-                EnrollmentDate = request.EnrollmentDate,
-                IsActive = true
+                // ИСПРАВЛЕНО: Принудительное преобразование DateTime.Kind в Utc
+                DateOfBirth = request.DateOfBirth.HasValue ? new DateTime(request.DateOfBirth.Value.Ticks, DateTimeKind.Utc) : (DateTime?)null,
+                // ИСПРАВЛЕНО: Принудительное преобразование DateTime.Kind в Utc
+                EnrollmentDate = request.EnrollmentDate.HasValue ? new DateTime(request.EnrollmentDate.Value.Ticks, DateTimeKind.Utc) : (DateTime?)null,
+                IsActive = true,
+                CreatedAt = DateTime.UtcNow, // Убедитесь, что это тоже UTC
+                UpdatedAt = DateTime.UtcNow  // Убедитесь, что это тоже UTC
             };
 
             _context.Students.Add(newStudent);
@@ -189,7 +195,6 @@ namespace StudentPerformance.Api.Services
             _logger.LogInformation("Student {StudentId} with User {UserId} added successfully.", (object)newStudent.StudentId, (object)newUser.Id);
             return _mapper.Map<StudentDto>(newStudent);
         }
-
 
         public async Task<bool> UpdateStudentAsync(int studentId, UpdateStudentRequest request)
         {
