@@ -86,8 +86,19 @@ namespace StudentPerformance.Api.Services
                 throw new ConflictException($"Семестр с кодом '{request.Code}' уже существует.");
             }
 
-
             var semester = _mapper.Map<Semester>(request);
+
+            // ИСПРАВЛЕНО: Принудительное преобразование StartDate и EndDate к Utc
+            // Удалены проверки .HasValue и .Value, так как request.StartDate и request.EndDate
+            // являются необнуляемыми DateTime в AddSemesterRequest.
+            semester.StartDate = DateTime.SpecifyKind(request.StartDate, DateTimeKind.Utc);
+            semester.EndDate = DateTime.SpecifyKind(request.EndDate, DateTimeKind.Utc);
+
+            // Установка CreatedAt и UpdatedAt в UTC
+            semester.CreatedAt = DateTime.UtcNow;
+            semester.UpdatedAt = DateTime.UtcNow;
+
+
             _context.Semesters.Add(semester);
             await _context.SaveChangesAsync();
             return _mapper.Map<SemesterDto>(semester);
