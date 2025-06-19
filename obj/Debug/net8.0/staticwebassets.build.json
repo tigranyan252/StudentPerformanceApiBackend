@@ -1,0 +1,12 @@
+{
+  "Version": 1,
+  "Hash": "hAEWTTY5IGFEBnb4lPFsoAAw6yNHH/3VtHJUeCCG+jw=",
+  "Source": "StudentPerformance.Api",
+  "BasePath": "_content/StudentPerformance.Api",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": [],
+  "Endpoints": []
+}
