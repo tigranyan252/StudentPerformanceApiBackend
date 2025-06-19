@@ -44,18 +44,23 @@ builder.Services.AddScoped<IPasswordHasher<User>, SimplePasswordHasher>();
 // Configure AutoMapper (MappingProfile to map entities to DTOs)
 builder.Services.AddAutoMapper(typeof(MappingProfile).Assembly);
 
-// --- ИЗМЕНЕНИЕ ЗДЕСЬ: Configure DbContext for PostgreSQL ---
+// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Configure DbContext for PostgreSQL ---
+// Получаем строку подключения. Сначала пробуем DATABASE_URL (для Heroku/Railway),
+// затем ConnectionStrings:DefaultConnection (для локальной разработки).
+var connectionString = builder.Configuration.GetValue<string>("DATABASE_URL") ?? // Проверяем переменную среды DATABASE_URL от Railway
+                       builder.Configuration.GetConnectionString("DefaultConnection") ?? // Если нет, берем из ConnectionStrings в appsettings.json
+                       throw new InvalidOperationException("Connection string 'DATABASE_URL' or 'DefaultConnection' not found.");
+
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))); // Использование UseNpgsql вместо UseSqlServer
+    options.UseNpgsql(connectionString)); // Использование UseNpgsql
+
+// ... остальной код такой же ...
 
 // --- 2. JWT Authentication Setup ---
 var jwtSecret = builder.Configuration["JwtSettings:Secret"];
 var jwtIssuer = builder.Configuration["JwtSettings:Issuer"];
 var jwtAudience = builder.Configuration["JwtSettings:Audience"];
-// Добавлена настройка времени жизни токена из конфигурации.
-// По умолчанию 15 минут, если в appsettings.json не указано.
-// Исправлено: "ExpirationMinutes" из appsettings.json
-var accessTokenExpirationMinutes = builder.Configuration.GetValue<int>("JwtSettings:ExpirationMinutes", 60); // Получаем ExpirationMinutes
+var accessTokenExpirationMinutes = builder.Configuration.GetValue<int>("JwtSettings:ExpirationMinutes", 60);
 
 if (string.IsNullOrEmpty(jwtSecret))
 {
@@ -82,12 +87,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
-            // Увеличена ClockSkew для удобства тестирования.
-            // ClockSkew - это допустимое отклонение времени между сервером, выдавшим токен,
-            // и сервером, его проверяющим. Это позволяет обрабатывать небольшие рассинхронизации.
-            // Установка ClockSkew в TimeSpan.Zero - хорошая практика для продакшена.
-            // Для целей тестирования можно оставить большим или установить по ExpirationMinutes
-            ClockSkew = TimeSpan.FromMinutes(accessTokenExpirationMinutes) // Используем значение из конфигурации
+            ClockSkew = TimeSpan.FromMinutes(accessTokenExpirationMinutes)
         };
     });
 
@@ -130,7 +130,6 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy(name: AllowReactAppSpecificOrigins, policy =>
     {
-        // Чтение разрешенных источников из конфигурации (appsettings.json или переменных среды)
         var allowedOrigins = builder.Configuration["CorsSettings:AllowedOrigins"]?
                                  .Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
                                  .Select(o => o.Trim())
@@ -145,15 +144,9 @@ builder.Services.AddCors(options =>
         }
         else
         {
-            // Если разрешенные источники не указаны в конфигурации,
-            // можно использовать более строгую политику или логировать предупреждение.
-            // Для локальной разработки, возможно, вам понадобится "AllowAnyOrigin" временно,
-            // но в продакшене это не рекомендуется.
-            policy.AllowAnyOrigin() // Осторожно: AllowAnyOrigin несовместим с AllowCredentials
+            policy.AllowAnyOrigin()
                   .AllowAnyMethod()
                   .AllowAnyHeader();
-            // Если вы используете AllowAnyOrigin, вы не можете использовать AllowCredentials.
-            // Удалите AllowCredentials если оставляете AllowAnyOrigin для продакшена.
         }
     });
 });
@@ -168,8 +161,7 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var context = services.GetRequiredService<ApplicationDbContext>();
-        // Применение миграций автоматически при запуске приложения (рекомендуется для Heroku)
-        context.Database.Migrate();
+        context.Database.Migrate(); // Applies any pending migrations for the database
         DataSeeder.SeedData(context); // Make sure DataSeeder.SeedData handles existing data gracefully
     }
     catch (Exception ex)
@@ -180,18 +172,21 @@ using (var scope = app.Services.CreateScope())
 }
 // --- End Data Seeding Section ---
 
-// --- 7. Configure the HTTP request pipeline (Middleware) ---
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-else
-{
-    // В продакшене рекомендуется использовать HTTPS
-    app.UseHsts();
-    app.UseHttpsRedirection();
-}
+// --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ: Включаем Swagger UI для всех сред ---
+app.UseSwagger();
+app.UseSwaggerUI();
+
+// Закомментированный старый блок:
+// if (app.Environment.IsDevelopment())
+// {
+//     app.UseSwagger();
+//     app.UseSwaggerUI();
+// }
+// else
+// {
+//     app.UseHsts();
+//     app.UseHttpsRedirection();
+// }
 
 app.UseCors(AllowReactAppSpecificOrigins); // CORS must be before UseRouting, UseAuthentication, UseAuthorization
 
