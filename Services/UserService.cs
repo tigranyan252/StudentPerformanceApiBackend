@@ -117,7 +117,8 @@ namespace StudentPerformance.Api.Services
                 };
 
                 // Assume _passwordHasher is correctly configured and working
-                newUser.PasswordHash = _passwordHasher.HashPassword(newUser, request.Password);
+                // If you use BCrypt.Net.BCrypt directly: newUser.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password);
+                newUser.PasswordHash = _passwordHasher.HashPassword(newUser, request.Password); // Or adjust based on your actual hasher setup
 
                 _context.Users.Add(newUser);
                 _logger.LogInformation($"User entity created for {request.Username}. Saving to DB (first save for User Id)...");
@@ -156,18 +157,23 @@ namespace StudentPerformance.Api.Services
                     var studentProfile = new Student
                     {
                         UserId = newUser.Id,
-                        GroupId = request.GroupId.Value, // Use .Value here for non-nullable int entity property
-                        DateOfBirth = request.DateOfBirth.Value, // Use .Value here for non-nullable DateTime entity property (if entity is DateTime)
-                        EnrollmentDate = request.EnrollmentDate.Value, // Use .Value here for non-nullable DateTime entity property (if entity is DateTime)
+                        GroupId = request.GroupId.Value,
+                        // ИСПРАВЛЕНО: Принудительное преобразование DateTime.Kind в Utc
+                        DateOfBirth = new DateTime(request.DateOfBirth.Value.Ticks, DateTimeKind.Utc),
+                        // ИСПРАВЛЕНО: Принудительное преобразование DateTime.Kind в Utc
+                        EnrollmentDate = new DateTime(request.EnrollmentDate.Value.Ticks, DateTimeKind.Utc),
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow,
-                        IsActive = true // Default value, assuming it's in your Student entity
+                        IsActive = true
                     };
                     _context.Students.Add(studentProfile);
                     _logger.LogInformation($"Student profile created for user {newUser.Id}. Saving profile to DB (second save)...");
                 }
                 else if (role.Name == UserRoles.Teacher)
                 {
+                    // УДАЛЕНО: Проверка на request.HireDate.HasValue
+                    // УДАЛЕНО: Выброс BadRequestException для HireDate
+
                     var teacherProfile = new Teacher
                     {
                         UserId = newUser.Id,
@@ -175,6 +181,8 @@ namespace StudentPerformance.Api.Services
                         Position = request.Position,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
+                        // УДАЛЕНО: Присвоение HireDate
+                        // HireDate = new DateTime(request.HireDate.Value.Ticks, DateTimeKind.Utc), 
                     };
                     _context.Teachers.Add(teacherProfile);
                     _logger.LogInformation($"Teacher profile created for user {newUser.Id}. Saving profile to DB (second save)...");
@@ -210,9 +218,7 @@ namespace StudentPerformance.Api.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, $"An error occurred during user registration for username: {request.Username}. Details: {ex.Message}");
-                // Re-throw the exception to ensure the API returns a 500 with details
-                // This is where your global exception handler (if configured) would catch it.
-                throw;
+                throw; // Re-throw the exception to ensure the API returns a 500 with details
             }
         }
 
@@ -2552,24 +2558,40 @@ namespace StudentPerformance.Api.Services
             var audienceString = jwtSettings["Audience"];
             var expirationMinutesString = jwtSettings["ExpirationMinutes"];
 
-            if (string.IsNullOrEmpty(secretString)) throw new InvalidOperationException("JWT Secret is not configured in appsettings.");
-            if (!double.TryParse(expirationMinutesString, out double expirationMinutes)) expirationMinutes = 15;
+            if (string.IsNullOrEmpty(secretString))
+            {
+                _logger.LogError("JWT Secret is not configured in appsettings.");
+                throw new InvalidOperationException("JWT Secret is not configured in appsettings.");
+            }
+            if (!double.TryParse(expirationMinutesString, out double expirationMinutes)) expirationMinutes = 60; // По умолчанию 60 минут, если не указано
 
             var key = Encoding.UTF8.GetBytes(secretString);
             var claims = new List<Claim>
-            {
-                new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-                new Claim(ClaimTypes.Name, user.Username),
-                new Claim(ClaimTypes.Role, user.Role?.Name ?? "User")
-            };
+    {
+        new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
+        new Claim(ClaimTypes.Name, user.Username),
+        new Claim(ClaimTypes.Email, user.Email ?? ""), // Email может быть null, поэтому добавил ?? ""
+        new Claim(ClaimTypes.Role, user.Role?.Name ?? "User"), // Роль пользователя
+        new Claim("userType", user.Role?.Name ?? "Unknown") // Дополнительный клейм для userType
+    };
 
-            // Add GroupId to claims ONLY if the user is a STUDENT and has a valid GroupId.
-            // ИСПРАВЛЕНИЕ: Удаляем .HasValue и .Value, так как user.Student.GroupId является int.
-            // Проверяем, что Student и GroupId существуют и GroupId > 0 (валидный ID).
-            if (user.Role?.Name == UserRoles.Student && user.Student != null && user.Student.GroupId > 0)
+            // Add GroupId to claims ONLY if the user is a STUDENT and has a valid Student profile with GroupId.
+            // ИСПРАВЛЕНО: Проверка user.Student != null и user.Student.GroupId, так как GroupId является int, а не int?
+            // Предполагается, что User.Student загружен (Include/ThenInclude).
+            if (user.Role?.Name == UserRoles.Student && user.Student != null)
             {
-                claims.Add(new Claim("groupId", user.Student.GroupId.ToString())); // ИСПРАВЛЕНИЕ: используем напрямую
-                _logger.LogInformation($"Added groupId {user.Student.GroupId} for student user {user.Username} to JWT claims."); // ИСПРАВЛЕНИЕ: используем напрямую
+                // GroupId в сущности Student - это int (не nullable), поэтому нет HasValue/Value.
+                // Добавляем клейм, если GroupId валиден (например, не 0, если 0 - это "нет группы").
+                // Если GroupId всегда будет > 0, то можно просто user.Student.GroupId.ToString()
+                if (user.Student.GroupId > 0) // Проверка, что GroupId не дефолтное значение или 0
+                {
+                    claims.Add(new Claim("groupId", user.Student.GroupId.ToString()));
+                    _logger.LogInformation($"Added groupId {user.Student.GroupId} for student user {user.Username} to JWT claims.");
+                }
+                else
+                {
+                    _logger.LogWarning($"Student user {user.Username} has a Student profile but an invalid GroupId ({user.Student.GroupId}). Not adding groupId claim.");
+                }
             }
             // For Teacher, typically their direct assignments are what matters, not a single groupId.
             // For Admin with groupId: null, no groupId claim is added, which is correct for a global admin.
