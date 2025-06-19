@@ -17,7 +17,7 @@ using StudentPerformance.Api.Data.Entities;
 using StudentPerformance.Api.Utilities;
 using System;
 using Npgsql;
-using StudentPerformance.Api; // Добавьте это using-директиву
+using StudentPerformance.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,7 +46,7 @@ var databaseUrl = builder.Configuration.GetValue<string>("DATABASE_URL");
 
 if (!string.IsNullOrEmpty(databaseUrl))
 {
-    // Парсим DATABASE_URL, предоставленную Railway
+    // Парсим DATABASE_URL, предоставленную Render
     // Формат: postgresql://user:password@host:port/database
     var uri = new Uri(databaseUrl);
     var userInfo = uri.UserInfo.Split(':');
@@ -54,7 +54,7 @@ if (!string.IsNullOrEmpty(databaseUrl))
     var password = userInfo[1];
     var host = uri.Host;
     var port = uri.Port;
-    var database = uri.Segments[1]; // Получаем имя базы данных (например, "railway/")
+    var database = uri.Segments[1]; // Получаем имя базы данных (например, "diploma_project_db/")
 
     // Строим строку подключения в явном формате Npgsql
     connectionString = $"Host={host};Port={port};Username={username};Password={password};Database={database.TrimEnd('/')};SSL Mode=Require;Trust Server Certificate=true";
@@ -73,25 +73,25 @@ if (string.IsNullOrEmpty(connectionString))
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// ... Остальной код Program.cs остается без изменений ...
-
 // --- 2. JWT Authentication Setup ---
-var jwtSecret = builder.Configuration["JwtSettings:Secret"];
-var jwtIssuer = builder.Configuration["JwtSettings:Issuer"];
-var jwtAudience = builder.Configuration["JwtSettings:Audience"];
+// ИСПРАВЛЕНИЕ: Читаем JWT-настройки напрямую из переменных среды
+var jwtSecret = Environment.GetEnvironmentVariable("JwtSettings__Secret");
+var jwtIssuer = Environment.GetEnvironmentVariable("JwtSettings__Issuer");
+var jwtAudience = Environment.GetEnvironmentVariable("JwtSettings__Audience");
+// Для ExpirationMinutes можно оставить GetValue, так как есть значение по умолчанию
 var accessTokenExpirationMinutes = builder.Configuration.GetValue<int>("JwtSettings:ExpirationMinutes", 60);
 
 if (string.IsNullOrEmpty(jwtSecret))
 {
-    throw new InvalidOperationException("JWT Secret is not configured. Please add 'JwtSettings:Secret' to appsettings.json or user secrets.");
+    throw new InvalidOperationException("JWT Secret is not configured in environment variables. Please set 'JwtSettings__Secret'.");
 }
 if (string.IsNullOrEmpty(jwtIssuer))
 {
-    throw new InvalidOperationException("JWT Issuer is not configured. Please add 'JwtSettings:Issuer' to appsettings.json or user secrets.");
+    throw new InvalidOperationException("JWT Issuer is not configured in environment variables. Please set 'JwtSettings__Issuer'.");
 }
 if (string.IsNullOrEmpty(jwtAudience))
 {
-    throw new InvalidOperationException("JWT Audience is not configured. Please add 'JwtSettings:Audience' to appsettings.json or user secrets.");
+    throw new InvalidOperationException("JWT Audience is not configured in environment variables. Please set 'JwtSettings__Audience'.");
 }
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
