@@ -12,7 +12,8 @@ namespace StudentPerformance.Api.Data
     {
         public static void SeedData(ApplicationDbContext context)
         {
-            context.Database.EnsureCreated(); // Consider using context.Database.Migrate() if using migrations
+            // context.Database.EnsureCreated(); // Consider using context.Database.Migrate() if using migrations
+            // Вы уже используете context.Database.Migrate() в Program.cs, поэтому EnsureCreated() здесь не нужен.
 
             Role adminRole, teacherRole, studentRole;
             List<User> allUsers;
@@ -53,8 +54,9 @@ namespace StudentPerformance.Api.Data
                     .RuleFor(u => u.FirstName, f => f.Name.FirstName())
                     .RuleFor(u => u.LastName, f => f.Name.LastName())
                     .RuleFor(u => u.Email, (f, u) => f.Internet.Email(u.FirstName, u.LastName))
-                    .RuleFor(u => u.CreatedAt, f => f.Date.Past(1))
-                    .RuleFor(u => u.UpdatedAt, f => f.Date.Recent(1));
+                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                    .RuleFor(u => u.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
+                    .RuleFor(u => u.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
 
                 var adminUsersList = userFaker.Generate(1).Select(u => { u.RoleId = adminRole.RoleId; return u; }).ToList();
                 var teacherUsersList = userFaker.Generate(3).Select(u => { u.RoleId = teacherRole.RoleId; return u; }).ToList();
@@ -77,8 +79,9 @@ namespace StudentPerformance.Api.Data
                     .RuleFor(g => g.Name, f => $"Группа {f.Random.AlphaNumeric(3).ToUpper()}")
                     .RuleFor(g => g.Code, f => f.Finance.Account(4))
                     .RuleFor(g => g.Description, f => f.Lorem.Sentence())
-                    .RuleFor(g => g.CreatedAt, f => f.Date.Past(1))
-                    .RuleFor(g => g.UpdatedAt, f => f.Date.Recent(1));
+                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                    .RuleFor(g => g.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
+                    .RuleFor(g => g.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
                 context.Groups.AddRange(groupFaker.Generate(5));
                 context.SaveChanges();
             }
@@ -91,8 +94,9 @@ namespace StudentPerformance.Api.Data
                     .RuleFor(s => s.Name, f => f.Commerce.ProductName())
                     .RuleFor(s => s.Code, f => f.Random.AlphaNumeric(5).ToUpper())
                     .RuleFor(s => s.Description, f => f.Lorem.Sentence())
-                    .RuleFor(s => s.CreatedAt, f => f.Date.Past(1))
-                    .RuleFor(s => s.UpdatedAt, f => f.Date.Recent(1));
+                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                    .RuleFor(s => s.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
+                    .RuleFor(s => s.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
                 context.Subjects.AddRange(subjectFaker.Generate(10));
                 context.SaveChanges();
             }
@@ -101,13 +105,14 @@ namespace StudentPerformance.Api.Data
             // 5. Seed Semesters
             if (!context.Semesters.Any())
             {
-                var currentYear = DateTime.Now.Year;
+                var currentYear = DateTime.UtcNow.Year; // ИСПРАВЛЕНИЕ: Использовать UtcNow для получения года
                 var semestersToSeed = new List<Semester>
                 {
-                    new Semester { Name = $"{currentYear} Весенний", StartDate = new DateTime(currentYear, 2, 1), EndDate = new DateTime(currentYear, 6, 30), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-                    new Semester { Name = $"{currentYear} Осенний", StartDate = new DateTime(currentYear, 9, 1), EndDate = new DateTime(currentYear, 12, 31), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-                    new Semester { Name = $"{currentYear - 1} Весенний", StartDate = new DateTime(currentYear - 1, 2, 1), EndDate = new DateTime(currentYear - 1, 6, 30), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-                    new Semester { Name = $"{currentYear - 1} Осенний", StartDate = new DateTime(currentYear - 1, 9, 1), EndDate = new DateTime(currentYear - 1, 12, 31), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
+                    // ИСПРАВЛЕНИЕ: Явно указываем DateTimeKind.Utc при создании новых DateTime
+                    new Semester { Name = $"{currentYear} Весенний", StartDate = new DateTime(currentYear, 2, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(currentYear, 6, 30, 0, 0, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                    new Semester { Name = $"{currentYear} Осенний", StartDate = new DateTime(currentYear, 9, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(currentYear, 12, 31, 0, 0, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                    new Semester { Name = $"{currentYear - 1} Весенний", StartDate = new DateTime(currentYear - 1, 2, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(currentYear - 1, 6, 30, 0, 0, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+                    new Semester { Name = $"{currentYear - 1} Осенний", StartDate = new DateTime(currentYear - 1, 9, 1, 0, 0, 0, DateTimeKind.Utc), EndDate = new DateTime(currentYear - 1, 12, 31, 0, 0, 0, DateTimeKind.Utc), CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow }
                 };
                 context.Semesters.AddRange(semestersToSeed);
                 context.SaveChanges();
@@ -126,8 +131,9 @@ namespace StudentPerformance.Api.Data
                     {
                         UserId = user.Id,
                         GroupId = studentDataFaker.PickRandom(groups).GroupId,
-                        DateOfBirth = studentDataFaker.Date.Past(20, DateTime.Now.AddYears(-18)),
-                        EnrollmentDate = studentDataFaker.Date.Past(2, DateTime.Now.AddYears(-1)),
+                        // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                        DateOfBirth = studentDataFaker.Date.Past(20, DateTime.UtcNow.AddYears(-18)).ToUniversalTime(),
+                        EnrollmentDate = studentDataFaker.Date.Past(2, DateTime.UtcNow.AddYears(-1)).ToUniversalTime(),
                         IsActive = true,
                         CreatedAt = DateTime.UtcNow,
                         UpdatedAt = DateTime.UtcNow
@@ -188,8 +194,9 @@ namespace StudentPerformance.Api.Data
                             SubjectId = subject.SubjectId,
                             GroupId = group.GroupId,
                             SemesterId = semester.SemesterId,
-                            CreatedAt = faker.Date.Past(1),
-                            UpdatedAt = faker.Date.Recent(1)
+                            // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                            CreatedAt = faker.Date.Past(1).ToUniversalTime(),
+                            UpdatedAt = faker.Date.Recent(1).ToUniversalTime()
                         });
                     }
                 }
@@ -208,10 +215,12 @@ namespace StudentPerformance.Api.Data
                     .RuleFor(a => a.Description, f => f.Lorem.Sentence())
                     .RuleFor(a => a.Type, f => f.PickRandom("Quiz", "Homework", "Project", "Exam"))
                     .RuleFor(a => a.MaxScore, f => f.Random.Decimal(5, 100))
-                    .RuleFor(a => a.DueDate, f => f.Date.Future(1))
-                    .RuleFor(a => a.SubmissionDate, (f, a) => f.Date.Between(a.CreatedAt, a.DueDate))
-                    .RuleFor(a => a.CreatedAt, f => f.Date.Past(1))
-                    .RuleFor(a => a.UpdatedAt, f => f.Date.Recent(1));
+                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                    .RuleFor(a => a.DueDate, f => f.Date.Future(1).ToUniversalTime())
+                    .RuleFor(a => a.SubmissionDate, (f, a) => f.Date.Between(a.CreatedAt, a.DueDate).ToUniversalTime())
+                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                    .RuleFor(a => a.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
+                    .RuleFor(a => a.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
                 context.Assignments.AddRange(assignmentFaker.Generate(50));
                 context.SaveChanges();
             }
@@ -223,11 +232,13 @@ namespace StudentPerformance.Api.Data
                 var attendanceFaker = new Faker<Attendance>()
                     .RuleFor(a => a.StudentId, f => f.PickRandom(students).StudentId)
                     .RuleFor(a => a.TeacherSubjectGroupAssignmentId, f => f.PickRandom(teacherSubjectGroupAssignments).TeacherSubjectGroupAssignmentId)
-                    .RuleFor(a => a.Date, f => f.Date.Recent(30))
+                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                    .RuleFor(a => a.Date, f => f.Date.Recent(30).ToUniversalTime())
                     .RuleFor(a => a.Status, f => f.PickRandom("Present", "Absent", "Late", "Excused"))
                     .RuleFor(a => a.Remarks, f => f.Lorem.Sentence(3))
-                    .RuleFor(a => a.CreatedAt, f => f.Date.Past(1))
-                    .RuleFor(a => a.UpdatedAt, f => f.Date.Recent(1));
+                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                    .RuleFor(a => a.CreatedAt, f => f.Date.Past(1).ToUniversalTime())
+                    .RuleFor(a => a.UpdatedAt, f => f.Date.Recent(1).ToUniversalTime());
                 context.Attendances.AddRange(attendanceFaker.Generate(100));
                 context.SaveChanges();
             }
@@ -262,9 +273,10 @@ namespace StudentPerformance.Api.Data
                                     TeacherSubjectGroupAssignmentId = tsga.TeacherSubjectGroupAssignmentId,
                                     Value = baseFaker.Random.Decimal(0, 100),
                                     ControlType = baseFaker.PickRandom("Quiz", "Exam", "Lab", "Project"),
-                                    DateReceived = baseFaker.Date.Recent(60),
+                                    // ИСПРАВЛЕНИЕ: Преобразуем DateTime в UTC
+                                    DateReceived = baseFaker.Date.Recent(60).ToUniversalTime(),
                                     Status = baseFaker.PickRandom("Passed", "Failed", "Pending"),
-                                    Notes = baseFaker.Lorem.Sentence(), // ДОБАВЛЕНО: Генерация заметок
+                                    Notes = baseFaker.Lorem.Sentence(),
                                     CreatedAt = DateTime.UtcNow,
                                     UpdatedAt = DateTime.UtcNow
                                 });
